@@ -5,8 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:access/theme/app_theme.dart' as AppTheme;
 import 'package:access/theme/app_colors.dart';
-import 'dart:html' as html; // Προσθήκη
+import 'dart:html' as html;
 
+/// Login screen for the Δήμος web app.
+/// Handles user input for email and password, dispatches login events,
+/// listens for login success or failure to navigate or show error messages.
+/// Also listens to browser back button to handle redirection based on auth token.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -15,7 +19,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-
+  /// Subscription for browser back button popstate events.
   StreamSubscription<html.PopStateEvent>? _popStateSubscription;
 
   @override
@@ -36,6 +40,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+
+  /// Controls visibility of the password text field.
   bool _obscurePassword = true;
 
   @override
@@ -62,7 +68,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   (Route<dynamic> route) => false,
             );
             html.window.history.replaceState(null, '', '/webhome');
-          }else if (state is LoginFailure) {
+          } else if (state is LoginFailure) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(state.message),

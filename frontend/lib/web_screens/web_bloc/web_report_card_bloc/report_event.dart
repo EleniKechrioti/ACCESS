@@ -1,5 +1,7 @@
 part of 'report_bloc.dart';
 
+/// Base abstract class for all report-related events.
+/// Extends Equatable for easy comparison in Bloc.
 abstract class ReportEvent extends Equatable {
   const ReportEvent();
 
@@ -7,6 +9,8 @@ abstract class ReportEvent extends Equatable {
   List<Object?> get props => [];
 }
 
+/// Event to submit a municipal report with all related data.
+/// Carries information like accessibility, dates, location, user info, and description.
 class SubmitReport extends ReportEvent {
   final String? accessibility;
   final DateTime startDate;

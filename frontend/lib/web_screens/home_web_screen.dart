@@ -14,6 +14,10 @@ import '../blocs/search_bloc/search_bloc.dart';
 import 'package:access/theme/app_colors.dart';
 import 'map.dart';
 
+/// Web-only home screen displaying the interactive accessible city map,
+/// with clustered reports loaded from backend and user interaction handling.
+/// Manages communication with the embedded map iframe via HTML window messages,
+/// plus sidebar navigation, report dialogs, and authentication token checks.
 class HomeWebScreen extends StatefulWidget {
   const HomeWebScreen({super.key});
 
@@ -22,19 +26,31 @@ class HomeWebScreen extends StatefulWidget {
 }
 
 class _HomeWebScreenState extends State<HomeWebScreen> {
+  /// Subscription for browser pop state (history back) events.
   StreamSubscription<html.PopStateEvent>? _popStateSubscription;
-  StreamSubscription<html.MessageEvent>? _messageSubscription; // Νέο subscription
+
+  /// Subscription for browser window message events, to communicate with map iframe.
+  StreamSubscription<html.MessageEvent>? _messageSubscription;
+
+  /// Holds the clusters of reports fetched from backend.
   List<dynamic> clusters = [];
+
+  /// Flag to track whether the map iframe has finished loading.
   bool _isMapLoaded = false;
 
   @override
   void initState() {
     super.initState();
+
+    /// Load clusters from backend on startup.
     _loadClusters();
+
+    /// Check for auth token in browser localStorage, redirect if missing.
     final authToken = html.window.localStorage['authToken'];
     if (authToken == null) {
       Future.microtask(() => Navigator.pushReplacementNamed(context, '/login'));
     } else {
+      /// Listen for browser back button events and pop navigation stack accordingly.
       _popStateSubscription = html.window.onPopState.listen((event) {
         if (ModalRoute.of(context)?.settings.name == '/webhome') {
           return;
@@ -45,6 +61,7 @@ class _HomeWebScreenState extends State<HomeWebScreen> {
       });
     }
 
+    /// Listen for messages from the map iframe and handle different event types.
     _messageSubscription = html.window.onMessage.listen((event) {
       try {
         if (event.data['type'] == 'mapLongPress') {
@@ -73,6 +90,7 @@ class _HomeWebScreenState extends State<HomeWebScreen> {
     });
   }
 
+  /// Fetches report clusters from the backend server.
   Future<void> _loadClusters() async {
     try {
       final response = await http.get(Uri.parse('http://localhost:9090/setreport'));
@@ -112,6 +130,7 @@ class _HomeWebScreenState extends State<HomeWebScreen> {
     }
   }
 
+  /// Formats an ISO timestamp string to a readable date/time.
   String _formatTimestamp(String timestamp) {
     try {
       final date = DateTime.parse(timestamp);
@@ -121,6 +140,7 @@ class _HomeWebScreenState extends State<HomeWebScreen> {
     }
   }
 
+  /// Sends the current clusters data to the embedded map iframe.
   void _sendClustersToMap() {
     final iframe = html.document.getElementById('map-iframe') as html.IFrameElement?;
     if (iframe?.contentWindow != null) {
@@ -131,6 +151,7 @@ class _HomeWebScreenState extends State<HomeWebScreen> {
     }
   }
 
+  /// Displays a dialog listing the reports inside a cluster.
   void _showClusterReports(List<dynamic> reports) {
     html.document.getElementById('map-iframe')?.style.pointerEvents = 'none';
     showDialog(
@@ -172,6 +193,7 @@ class _HomeWebScreenState extends State<HomeWebScreen> {
     });
   }
 
+  /// Displays a detailed dialog for a single report.
   void _showReportDetails(dynamic report) {
     html.document.getElementById('map-iframe')?.style.pointerEvents = 'none';
 
@@ -235,6 +257,7 @@ class _HomeWebScreenState extends State<HomeWebScreen> {
     });
   }
 
+  /// Helper widget for displaying an icon next to a text info line.
   Widget _buildInfoRow(IconData icon, String text) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -256,6 +279,7 @@ class _HomeWebScreenState extends State<HomeWebScreen> {
     super.dispose();
   }
 
+  /// Handles long press events from the map by opening the report submission dialog.
   void _handleLongPress(List<double> coordinates) {
     html.document.getElementById('map-iframe')?.style.pointerEvents = 'none';
     if (!context.read<HomeWebBloc>().state.isReportDialogOpen) {

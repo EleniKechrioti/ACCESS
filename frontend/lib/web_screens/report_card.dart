@@ -1,3 +1,4 @@
+// Import required packages and dependencies
 import 'package:access/web_screens/web_bloc/web_report_card_bloc/report_bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -6,8 +7,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:access/theme/app_colors.dart';
 import 'package:access/blocs/search_bloc/search_bloc.dart' as search;
 
-
+/// A form widget that allows users to submit municipal project reports,
+/// including location, timeframe, project type, accessibility level, and optional notes.
+/// Coordinates can be pre-filled if provided.
 class ReportCard extends StatefulWidget {
+
+  // Optional coordinates to initialize the location field
   final List<double>? coordinates;
   const ReportCard({Key? key, this.coordinates}) : super(key: key);
 
@@ -22,6 +27,7 @@ class _ReportCardState extends State<ReportCard> {
     super.initState();
     selectedCoordinates = widget.coordinates;
 
+    // If coordinates are provided, fill location field and trigger reverse geocoding
     if (widget.coordinates != null) {
       _locationController.text =
       "Συντεταγμένες: ${widget.coordinates![0].toStringAsFixed(5)}, ${widget.coordinates![1].toStringAsFixed(5)}";
@@ -32,6 +38,7 @@ class _ReportCardState extends State<ReportCard> {
     }
   }
 
+  // Controllers and form state variables
   final TextEditingController _damageReportController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
   List<double>? selectedCoordinates;
@@ -40,6 +47,7 @@ class _ReportCardState extends State<ReportCard> {
   String? _selectedProjectType;
   String? _accessibility;
 
+  // List of project types for dropdown
   final List<String> _projectTypes = [
     'Ανακαίνιση πεζοδρομίου',
     'Αποκατάσταση οδοστρώματος',
@@ -48,6 +56,7 @@ class _ReportCardState extends State<ReportCard> {
     'Άλλο',
   ];
 
+  // Accessibility levels for dropdown
   final List<String> _accessibilityType = [
     'Καθόλου Προσβάσιμο',
     'Δύσκολα Προσβάσιμο',
@@ -56,11 +65,13 @@ class _ReportCardState extends State<ReportCard> {
 
   @override
   void dispose() {
+    // Dispose controllers to free up resources
     _damageReportController.dispose();
     _locationController.dispose();
     super.dispose();
   }
 
+  // Show date picker with custom theme
   Future<DateTime?> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -94,6 +105,7 @@ class _ReportCardState extends State<ReportCard> {
     return picked;
   }
 
+  // Handle picking the project start date
   Future<void> _pickStartDate() async {
     final picked = await _pickDate();
     if (picked != null) {
@@ -101,6 +113,7 @@ class _ReportCardState extends State<ReportCard> {
     }
   }
 
+  // Handle picking the project end date
   Future<void> _pickEndDate() async {
     final picked = await _pickDate();
     if (picked != null) {
@@ -108,6 +121,7 @@ class _ReportCardState extends State<ReportCard> {
     }
   }
 
+  // Submit the filled form and trigger Bloc event
   void _submitForm() {
     final location = _locationController.text.trim();
 
@@ -115,12 +129,14 @@ class _ReportCardState extends State<ReportCard> {
     final email = user?.email ?? "Άγνωστο email";
     final userId = user?.uid ?? "Άγνωστο ID";
 
+    // Validate required fields
     if (_startDate == null || _endDate == null || _selectedProjectType == null || location.isEmpty || selectedCoordinates?[0] == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Συμπλήρωσε όλα τα απαιτούμενα πεδία.")),
       );
       return;
-    }else{
+    } else {
+      // Trigger report submission through ReportBloc
       context.read<ReportBloc>().add(
         SubmitReport(
           locationDescription: _locationController.text.trim(),
@@ -140,6 +156,7 @@ class _ReportCardState extends State<ReportCard> {
     }
   }
 
+  // Handle different search states and UI updates
   void _handleSearchResult(BuildContext context, SearchState state) {
     if (state is SearchLoaded) {
       if (state.results.isEmpty) {
@@ -152,13 +169,16 @@ class _ReportCardState extends State<ReportCard> {
         SnackBar(content: Text("Σφάλμα αναζήτησης: ${state.message}")),
       );
     } else if (state is CoordinatesNameLoaded) {
+      // Autofill address from coordinates
       final loadedState = state as CoordinatesNameLoaded;
       _locationController.text = loadedState.address;
     } else if (state is CoordinatesLoaded) {
+      // Store coordinates when selected from search
       selectedCoordinates = [state.feature.longitude, state.feature.latitude];
     }
   }
 
+  // Handle different report submission outcomes
   void _handleReportResult(BuildContext context, ReportState state) {
     if (state is ReportSuccess) {
       Navigator.of(context).pop();
@@ -175,6 +195,8 @@ class _ReportCardState extends State<ReportCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    // Report form UI wrapped in BlocListeners
     return BlocListener<SearchBloc, SearchState>(
       listener: _handleSearchResult,
       child: BlocListener<ReportBloc, ReportState>(
@@ -190,19 +212,25 @@ class _ReportCardState extends State<ReportCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+
+                // Header
                 Text("Αναφορά έργου δήμου:", style: theme.textTheme.titleLarge),
                 const SizedBox(height: 20),
+
+                // Location input
                 const Text("Τοποθεσία έργου", style: TextStyle(fontSize:16)),
                 const SizedBox(height: 6),
                 TextField(
-                  controller: _locationController,
-                  decoration: const InputDecoration(hintText: 'Πληκτρολόγησε διεύθυνση'),
-                  onSubmitted: (value) {
-                    if (value.trim().isNotEmpty){
-                      context.read<SearchBloc>().add(SearchQueryChanged(value));
+                    controller: _locationController,
+                    decoration: const InputDecoration(hintText: 'Πληκτρολόγησε διεύθυνση'),
+                    onSubmitted: (value) {
+                      if (value.trim().isNotEmpty){
+                        context.read<SearchBloc>().add(SearchQueryChanged(value));
+                      }
                     }
-                  }
                 ),
+
+                // Show search results
                 BlocBuilder<SearchBloc, SearchState>(
                   builder: (context, state) {
                     if (state is SearchLoading) {
@@ -233,26 +261,30 @@ class _ReportCardState extends State<ReportCard> {
                 ),
 
                 const SizedBox(height: 16),
+
+                // Date range section
                 const Text("Περίοδος εκτέλεσης έργου", style: TextStyle(fontSize:16)),
                 const SizedBox(height: 6),
                 Row(
                   children: [
+
+                    // Start date button
                     Expanded(
                       child: OutlinedButton(
                         style: ButtonStyle(
                           side: WidgetStateProperty.resolveWith<BorderSide>((states){
                             if (states.contains(WidgetState.hovered)) {
-                              return BorderSide(color: AppColors.grey, width: 1); // hover stroke
+                              return BorderSide(color: AppColors.grey, width: 1);
                             }
                             return BorderSide(color: AppColors.grey, width: 1);
                           }),
                           foregroundColor: WidgetStateProperty.resolveWith<Color>((states){
                             if (states.contains(WidgetState.hovered)) {
-                              return AppColors.primary; // hover text color
+                              return AppColors.primary;
                             }
                             return AppColors.blackAccent[700]!;
                           }),
-                          overlayColor: WidgetStateProperty.all(AppColors.primary.withOpacity(0.1)), // ripple hover
+                          overlayColor: WidgetStateProperty.all(AppColors.primary.withOpacity(0.1)),
                           shape: WidgetStateProperty.all(
                             RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
@@ -263,23 +295,26 @@ class _ReportCardState extends State<ReportCard> {
                             : "Ημερομηνία έναρξης", style: TextStyle(fontSize:14)),
                       ),
                     ),
+
                     const SizedBox(width: 10),
+
+                    // End date button
                     Expanded(
                       child: OutlinedButton(
                         style: ButtonStyle(
                           side: WidgetStateProperty.resolveWith<BorderSide>((states){
                             if (states.contains(WidgetState.hovered)) {
-                              return BorderSide(color: AppColors.grey, width: 1); // hover stroke
+                              return BorderSide(color: AppColors.grey, width: 1);
                             }
                             return BorderSide(color: AppColors.grey, width: 1);
                           }),
                           foregroundColor: WidgetStateProperty.resolveWith<Color>((states){
                             if (states.contains(WidgetState.hovered)) {
-                              return AppColors.primary; // hover text color
+                              return AppColors.primary;
                             }
                             return AppColors.blackAccent[700]!;
                           }),
-                          overlayColor: WidgetStateProperty.all(AppColors.primary.withOpacity(0.1)), // ripple hover
+                          overlayColor: WidgetStateProperty.all(AppColors.primary.withOpacity(0.1)),
                           shape: WidgetStateProperty.all(
                             RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
@@ -294,6 +329,8 @@ class _ReportCardState extends State<ReportCard> {
                 ),
 
                 const SizedBox(height: 16),
+
+                // Project type dropdown
                 const Text("Τύπος έργου", style: TextStyle(fontSize:16)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
@@ -308,6 +345,8 @@ class _ReportCardState extends State<ReportCard> {
                 ),
 
                 const SizedBox(height: 16),
+
+                // Optional damage description
                 const Text("Αναφορά έργου (προαιρετικά)", style: TextStyle(fontSize:16)),
                 const SizedBox(height: 6),
                 TextField(
@@ -320,6 +359,8 @@ class _ReportCardState extends State<ReportCard> {
                 ),
 
                 const SizedBox(height: 20),
+
+                // Accessibility level dropdown
                 const Text("Βαθμός Δυσκολίας", style: TextStyle(fontSize:16)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
@@ -334,9 +375,13 @@ class _ReportCardState extends State<ReportCard> {
                 ),
 
                 const SizedBox(height: 16),
+
+                // Submit and close buttons
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+
+                    // Close button
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(),
                       child: const Text("Κλείσιμο"),
@@ -352,7 +397,10 @@ class _ReportCardState extends State<ReportCard> {
                         ),
                       ),
                     ),
+
                     const SizedBox(width: 10),
+
+                    // Submit button with loading state
                     BlocBuilder<ReportBloc, ReportState>(
                       builder: (context, state) {
                         return ElevatedButton(

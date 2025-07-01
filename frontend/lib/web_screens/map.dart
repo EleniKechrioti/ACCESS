@@ -5,6 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+/// Web-only widget that embeds a Mapbox GL map in an iframe using `HtmlElementView`.
+/// Handles cluster marker rendering and interaction via postMessage,
+/// including long-press detection, cluster and report marker clicks,
+/// and live message communication between Flutter and the map.
 class MapBoxIframeView extends StatefulWidget {
   const MapBoxIframeView({super.key});
 
@@ -21,6 +25,8 @@ class _MapBoxIframeViewState extends State<MapBoxIframeView> {
     }
   }
 
+  /// Registers a dynamic HTML iframe with embedded Mapbox map
+  /// and configures event handlers for long press, cluster click, etc.
   void _registerMap() {
     const accessToken = String.fromEnvironment('token_web');
 
@@ -140,6 +146,7 @@ class _MapBoxIframeViewState extends State<MapBoxIframeView> {
     if (!kIsWeb) {
       return const Center(child: Text('Χάρτης διαθέσιμος μόνο στο Web.'));
     }
+
     return BlocBuilder<MapBloc, MapState>(
       builder: (context, state) {
         if (state is MapLoading) {

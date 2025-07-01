@@ -5,16 +5,22 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 part 'report_event.dart';
 part 'report_state.dart';
 
+/// Bloc to manage submitting municipal reports to Firestore.
+/// Handles submission flow with loading, success, and failure states.
 class ReportBloc extends Bloc<ReportEvent, ReportState> {
   ReportBloc() : super(ReportInitial()) {
+    // Registers event handler for submitting a report
     on<SubmitReport>(_onSubmitReport);
   }
 
+  /// Handles the SubmitReport event.
+  /// Adds a new document to Firestore with all report details.
   Future<void> _onSubmitReport(SubmitReport event,
       Emitter<ReportState> emit) async {
-    emit(ReportLoading());
+    emit(ReportLoading()); // Emit loading state while submitting
 
     try {
+      // Add the report data to Firestore collection 'municipal_reports'
       await FirebaseFirestore.instance.collection('municipal_reports').add({
         'accessibility': event.accessibility,
         'coordinates': GeoPoint(event.coordinates![0], event.coordinates![1]),
@@ -30,13 +36,14 @@ class ReportBloc extends Bloc<ReportEvent, ReportState> {
         'description': event.description,
       });
 
-      emit(ReportSuccess());
+      emit(ReportSuccess()); // Emit success state on completion
     } catch (e) {
-      emit(ReportFailure(e.toString()));
+      emit(ReportFailure(e.toString())); // Emit failure state with error message
     }
   }
 }
 
+/// State representing that a human-readable address from coordinates has been loaded.
 class CoordinatesNameLoaded extends ReportState {
   final String address;
 

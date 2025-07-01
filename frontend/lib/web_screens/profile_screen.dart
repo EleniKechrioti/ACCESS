@@ -5,6 +5,9 @@ import 'dart:ui' as ui;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+/// Displays the user profile screen including:
+/// - An embedded Power BI dashboard (web only)
+/// - A list of reports fetched by postal code (TK)
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
 
@@ -13,17 +16,21 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // Σύνδεσμος Power BI
+  /// Power BI embed URL (iframe for web)
   final String powerBiUrl =
       'https://app.powerbi.com/reportEmbed?reportId=dc6a2823-3800-44e2-acc3-e8e9c99582ac&autoAuth=true&ctid=ad5ba4a2-7857-4ea1-895e-b3d5207a174f';
 
-  // Gateway base URL (production: αλλάζεις το url)
+  /// Gateway base URL (update to production URL when needed)
   final String gatewayBaseUrl = 'http://localhost:9090';
-  final String testTk = '11523'; // Το ΤΚ που θες (ή φέρε δυναμικά)
+
+  /// Test postal code used to fetch reports
+  final String testTk = '11523';
 
   @override
   void initState() {
     super.initState();
+
+    /// Register iframe view for Power BI — works only on web
     if (kIsWeb) {
       // ignore: undefined_prefixed_name
       ui.platformViewRegistry.registerViewFactory(
@@ -40,7 +47,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  /// Φέρνει αναφορές για ΤΚ από Gateway
+  /// Fetches reports from the gateway by postal code
   Future<List<Map<String, dynamic>>> fetchReportsByTk(String tk) async {
     final url = Uri.parse('$gatewayBaseUrl/reports-by-tk?tk=$tk');
     final response = await http.get(url);
@@ -98,7 +105,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-/// Απομονωμένο widget για εμφάνιση αναφορών (modular!)
+/// Stateless widget that displays a list of reports using a Future
 class _ReportsList extends StatelessWidget {
   final Future<List<Map<String, dynamic>>> Function() fetchReports;
   const _ReportsList({required this.fetchReports});
@@ -114,30 +121,34 @@ class _ReportsList extends StatelessWidget {
         if (snapshot.hasError) {
           return Text('Σφάλμα: ${snapshot.error}');
         }
+
         final reports = snapshot.data ?? [];
         if (reports.isEmpty) {
           return const Text('Δεν υπάρχουν διαθέσιμες αναφορές.');
         }
+
         return ListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: reports.length,
           itemBuilder: (context, index) {
             final report = reports[index];
-            // Εδώ κάνεις map τα keys όπως έρχονται από το backend σου
+
+            /// Extract values safely from Firestore-style nested objects
             final title = report["locationDescription"]["stringValue"] ?? 'Χωρίς τίτλο';
             final dateRaw = report["timestamp"]["timestampValue"];
+
             String dateStr;
             if (dateRaw is String) {
               dateStr = dateRaw;
             } else if (dateRaw != null && dateRaw is Map && dateRaw['seconds'] != null) {
-              // Firebase Timestamp συμβατότητα αν έρθει τέτοιο
               final seconds = dateRaw['seconds'] as int;
               final date = DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
               dateStr = date.toLocal().toString();
             } else {
               dateStr = '';
             }
+
             return Card(
               child: ListTile(
                 title: Text(title),
