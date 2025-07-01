@@ -1,8 +1,10 @@
 part of '../map_bloc.dart';
 
+/// Extension on MapBloc to handle camera movement and orientation logic.
 extension MapBlocCamera on MapBloc {
 
-
+  /// Handles the FlyTo event by animating the camera to a specific location.
+  /// Used when the user selects a location or initiates a navigation.
   Future<void> _onFlyTo(FlyTo event, Emitter<MapState> emit) async {
     final point = mapbox.Point(
         coordinates: mapbox.Position(event.longitude, event.latitude));
@@ -12,6 +14,9 @@ extension MapBlocCamera on MapBloc {
     );
   }
 
+  /// Changes the camera view based on the user's current location and heading.
+  /// If followMode is true, the camera follows the user's direction.
+  /// Pitch and zoom are adjusted depending on whether navigation is active.
   Future<void> _changeCamera(double heading, bool? followMode) async {
     final point = await geolocator.Geolocator.getCurrentPosition();
     final bool isFollowing = followMode ?? state.isCameraFollowing;
@@ -29,6 +34,8 @@ extension MapBlocCamera on MapBloc {
     );
   }
 
+  /// Starts listening to compass heading updates.
+  /// If camera following is enabled, updates the camera bearing based on heading.
   void startCompassListener() {
     _compassSubscription = FlutterCompass.events!.listen((event) {
       final double? heading = event.heading;

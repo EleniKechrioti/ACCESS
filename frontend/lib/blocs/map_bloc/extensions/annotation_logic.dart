@@ -1,15 +1,20 @@
 part of '../map_bloc.dart';
 
+/// Extension on MapBloc for handling all annotation-related logic.
+/// This includes markers for user input, category features, favorites, and clustered reports.
 extension MapBlocAnnotations on MapBloc {
+  /// Handles the AddMarker event by placing a single marker at the given lat/lng.
+  /// Deletes previous user-added markers before adding a new one.
   Future<void> _onAddMarker(AddMarker event, Emitter<MapState> emit) async {
     final map = state.mapController;
     if (map == null || _annotationManager == null) return;
-    if(state is! MapAnnotationClicked) {
+    if (state is! MapAnnotationClicked) {
       try {
         final bytes = await rootBundle.load('assets/images/pin.png');
         final imageData = bytes.buffer.asUint8List();
         final point = mapbox.Point(
-            coordinates: mapbox.Position(event.longitude, event.latitude));
+          coordinates: mapbox.Position(event.longitude, event.latitude),
+        );
 
         await _annotationManager!.deleteAll();
         await _annotationManager!.create(
@@ -26,10 +31,13 @@ extension MapBlocAnnotations on MapBloc {
     }
   }
 
+  /// Deletes all user-added markers (from long tap).
   Future<void> _onDeleteMarker(DeleteMarker event, Emitter<MapState> emit) async {
     await _annotationManager?.deleteAll();
   }
 
+  /// Handles adding multiple category markers (POIs) to the map.
+  /// Optionally zooms to fit all markers in view.
   Future<void> _onAddCategoryMarkers(AddCategoryMarkers event, Emitter<MapState> emit) async {
     final map = state.mapController;
     if (map == null || _categoryAnnotationManager == null) return;
@@ -38,22 +46,26 @@ extension MapBlocAnnotations on MapBloc {
       final bytes = await rootBundle.load('assets/images/pin.png');
       final imageData = bytes.buffer.asUint8List();
       List<mapbox.PointAnnotationOptions> optionsList = [];
+
       double? minLat, maxLat, minLng, maxLng;
 
       for (final feature in event.features) {
-        var point = mapbox.Point(
-            coordinates: mapbox.Position(feature.longitude, feature.latitude));
-        optionsList.add(mapbox.PointAnnotationOptions(
-          geometry: point,
-          iconSize: 0.4,
-          image: imageData,
-          iconAnchor: mapbox.IconAnchor.BOTTOM,
-          textField: feature.name,
-          textSize: 10,
-          textMaxWidth: 15,
-        ));
+        final point = mapbox.Point(
+          coordinates: mapbox.Position(feature.longitude, feature.latitude),
+        );
+        optionsList.add(
+          mapbox.PointAnnotationOptions(
+            geometry: point,
+            iconSize: 0.4,
+            image: imageData,
+            iconAnchor: mapbox.IconAnchor.BOTTOM,
+            textField: feature.name,
+            textSize: 10,
+            textMaxWidth: 15,
+          ),
+        );
 
-
+        // Update bounds for auto-zoom
         final lat = feature.latitude;
         final lng = feature.longitude;
         minLat = minLat == null ? lat : min(minLat, lat);
@@ -61,29 +73,32 @@ extension MapBlocAnnotations on MapBloc {
         minLng = minLng == null ? lng : min(minLng, lng);
         maxLng = maxLng == null ? lng : max(maxLng, lng);
       }
+
       await _categoryAnnotationManager!.deleteAll();
       createdAnnotations = await _categoryAnnotationManager!.createMulti(optionsList);
 
+      // Map annotation IDs to features
       final Map<String, String> idMap = {};
       final Map<String, MapboxFeature> featureMap = {};
       if (createdAnnotations.length == event.features.length) {
         for (int i = 0; i < createdAnnotations.length; i++) {
-          print("Annotation ID: ${createdAnnotations[i]!.id}");
-          print("Feature ID: ${event.features[i].id}");
           final internalId = createdAnnotations[i]!.id;
-          final String correctMapboxId = event.features[i].id;
-          final MapboxFeature feature = event.features[i];
+          final correctMapboxId = event.features[i].id;
+          final feature = event.features[i];
           if (correctMapboxId.isNotEmpty) {
             idMap[internalId] = correctMapboxId;
             featureMap[correctMapboxId] = feature;
-            print("Mapping internal ID: $internalId -> mapboxId: $correctMapboxId"); // Debug
           }
         }
       } else {
-        print("Warning: Mismatch between created annotations and input features count.");
+        print("Mismatch between annotations and features.");
       }
 
-      emit(state.copyWith(categoryAnnotations: Set.from(createdAnnotations), annotationIdMap: idMap, featureMap: featureMap));
+      emit(state.copyWith(
+        categoryAnnotations: Set.from(createdAnnotations),
+        annotationIdMap: idMap,
+        featureMap: featureMap,
+      ));
 
 
       if (event.shouldZoomToBounds && minLat != null && maxLat != null &&
@@ -110,15 +125,18 @@ extension MapBlocAnnotations on MapBloc {
     }
   }
 
+  /// Emits the event when an internal annotation is clicked (e.g. category marker).
   void _onAnnotationClickedInternal(_AnnotationClickedInternal event, Emitter<MapState> emit) {
     emit(MapAnnotationClicked(event.mapboxId, event.feature, state));
   }
 
+  /// Clears all category annotations from the map and state.
   Future<void> _onClearCategoryMarkers(ClearCategoryMarkers event, Emitter<MapState> emit) async {
     await _categoryAnnotationManager?.deleteAll();
     emit(state.copyWith(categoryAnnotations: {}));
   }
 
+  /// Loads and displays favorite annotations based on saved user data (e.g., from Firestore).
   Future<void> _onRenderFavoriteAnnotations(RenderFavoriteAnnotations event, Emitter<MapState> emit) async {
     while (_favoritesAnnotationManager == null) {
       if (state.mapController == null) {
@@ -130,10 +148,8 @@ extension MapBlocAnnotations on MapBloc {
     }
     if (_favoritesAnnotationManager == null) return;
 
-
     final bytes = await rootBundle.load('assets/images/star.png');
     final imageData = bytes.buffer.asUint8List();
-    List<mapbox.PointAnnotationOptions> optionsList = [];
 
     final annotations = event.favorites.entries.map((entry) {
       final data = entry.value as Map<String, dynamic>;
@@ -152,127 +168,108 @@ extension MapBlocAnnotations on MapBloc {
     await _favoritesAnnotationManager!.createMulti(annotations);
   }
 
+  /// Loads clusters from the backend and places markers for each cluster on the map.
   Future<void> _onLoadClusters(LoadClusters event, Emitter<MapState> emit) async {
     try {
       final url = 'http://192.168.1.69:9090/setreport';
-      final response = await http.get(Uri.parse(url))
-          .timeout(const Duration(seconds: 10));
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        final dynamic rawData = json.decode(response.body);
+        final rawData = json.decode(response.body);
         final clusters = _processClusters(rawData);
 
         if (clusters.isNotEmpty) {
-          final idmap = await _addClusterMarkers(clusters);
-          emit(state.copyWith(clusters: clusters, clusterAnnotationIdMap: idmap));
+          final idMap = await _addClusterMarkers(clusters);
+          emit(state.copyWith(clusters: clusters, clusterAnnotationIdMap: idMap));
         } else {
-          debugPrint('Δεν βρέθηκαν clusters');
+          debugPrint('No clusters found.');
         }
       } else {
-        debugPrint('Σφάλμα server: ${response.statusCode}');
+        debugPrint('Server error: ${response.statusCode}');
       }
     } on SocketException catch (e) {
-      debugPrint('Σφάλμα δικτύου: $e');
-    } on TimeoutException catch (_) {
-      debugPrint('Timeout - Ο server δεν απάντησε');
+      debugPrint('Network error: $e');
+    } on TimeoutException {
+      debugPrint('Timeout - no response from server.');
     } catch (e) {
-      debugPrint('Γενικό σφάλμα: $e');
+      debugPrint('Unexpected error: $e');
     }
   }
 
+  /// Parses raw JSON from the backend into a list of report clusters.
   List<List<Map<String, dynamic>>> _processClusters(dynamic rawClusters) {
     try {
       final List clustersList = rawClusters as List;
-      return clustersList.map<List<Map<String, dynamic>>>((dynamic cluster) {
-
-        final List reportsList = cluster as List;
-        return reportsList.map<Map<String, dynamic>>((dynamic report) {
-
-          final Map<String, dynamic> reportMap = report as Map<String, dynamic>;
-
+      return clustersList.map<List<Map<String, dynamic>>>((cluster) {
+        return (cluster as List).map<Map<String, dynamic>>((report) {
+          final data = report as Map<String, dynamic>;
           return {
-            'id': reportMap['id'] as String? ?? '',
-            'timestamp': _formatTimestamp(reportMap['timestamp'] as String? ?? ''),
-            'latitude': (reportMap['latitude'] as num?)?.toDouble() ?? 0.0,
-            'longitude': (reportMap['longitude'] as num?)?.toDouble() ?? 0.0,
-            'obstacleType': reportMap['obstacleType'] as String? ?? '',
-            'locationDescription': reportMap['locationDescription'] as String? ?? '',
-            'imageUrl': reportMap['imageUrl'] as String? ?? '',
-            'accessibility': reportMap['accessibility'] as String? ?? '',
-            'description': reportMap['description'] as String? ?? '',
-            'userId': reportMap['userId'] as String? ?? '',
-            'userEmail': reportMap['userEmail'] as String? ?? '',
+            'id': data['id'] ?? '',
+            'timestamp': _formatTimestamp(data['timestamp'] ?? ''),
+            'latitude': (data['latitude'] as num?)?.toDouble() ?? 0.0,
+            'longitude': (data['longitude'] as num?)?.toDouble() ?? 0.0,
+            'obstacleType': data['obstacleType'] ?? '',
+            'locationDescription': data['locationDescription'] ?? '',
+            'imageUrl': data['imageUrl'] ?? '',
+            'accessibility': data['accessibility'] ?? '',
+            'description': data['description'] ?? '',
+            'userId': data['userId'] ?? '',
+            'userEmail': data['userEmail'] ?? '',
           };
         }).toList();
       }).toList();
     } catch (e) {
-      debugPrint('Σφάλμα επεξεργασίας clusters: $e');
+      debugPrint('Error processing cluster data: $e');
       return [];
     }
   }
 
+  /// Formats ISO timestamps into a readable DD/MM/YYYY HH:MM format.
   String _formatTimestamp(String timestamp) {
     try {
       final date = DateTime.parse(timestamp);
       return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute}';
-    } catch (e) {
+    } catch (_) {
       return timestamp;
     }
   }
 
+  /// Places cluster markers on the map and returns a map of annotation ID to cluster index.
   Future<Map<String, int>?> _addClusterMarkers(List<List<Map<String, dynamic>>> clusters) async {
     if (_clusterAnnotationManager == null) {
       if (state.mapController == null) return null;
-
       _clusterAnnotationManager = await state.mapController!.annotations
           .createPointAnnotationManager(id: 'clusters-layer');
     }
-
     if (_clusterAnnotationManager == null) return null;
 
     final bytes = await rootBundle.load('assets/images/report_pin.png');
     final imageData = bytes.buffer.asUint8List();
 
-    List<mapbox.PointAnnotationOptions> optionsList = [];
-    for (var cluster in clusters) {
-      if (cluster.isNotEmpty) {
-        final firstReport = cluster[0];
-        optionsList.add(
-          mapbox.PointAnnotationOptions(
-            geometry: mapbox.Point(
-              coordinates: mapbox.Position(
-                firstReport['longitude'] as double,
-                firstReport['latitude'] as double,
-              ),
-            ),
-            iconSize: 0.2,
-            image: imageData,
-            iconAnchor: mapbox.IconAnchor.BOTTOM,
-          ),
-        );
-      }
-    }
+    final optionsList = clusters.map((cluster) {
+      final first = cluster.first;
+      return mapbox.PointAnnotationOptions(
+        geometry: mapbox.Point(
+          coordinates: mapbox.Position(first['longitude'], first['latitude']),
+        ),
+        iconSize: 0.2,
+        image: imageData,
+        iconAnchor: mapbox.IconAnchor.BOTTOM,
+      );
+    }).toList();
 
     await _clusterAnnotationManager!.deleteAll();
     final annotations = await _clusterAnnotationManager!.createMulti(optionsList);
 
     final Map<String, int> idMap = {};
-    if (annotations.length == clusters.length) {
-      for (int i = 0; i < annotations.length; i++) {
-        print("Annotation ID: ${annotations[i]!.id}");
-        print("cluster id: ${i}");
-        final internalId = annotations[i]!.id;
-        idMap[internalId] = i;
-        print("Mapping internal ID: $internalId -> mapboxId: $i"); // Debug
-      }
-    } else {
-      print("Warning: Mismatch between created annotations and input features count.");
+    for (int i = 0; i < annotations.length; i++) {
+      idMap[annotations[i]!.id] = i;
     }
     return idMap;
   }
 
+  /// Emits state to show reports for a clicked cluster.
   void _onClusterMarkerClicked(ClusterMarkerClicked event, Emitter<MapState> emit) {
-    print("clicked");
     emit(ClusterAnnotationClicked(event.reports, state));
     emit(state.copyWith(
       showClusterReports: true,
@@ -281,11 +278,11 @@ extension MapBlocAnnotations on MapBloc {
     ));
   }
 
+  /// Hides the cluster report view and clears data from state.
   void _onHideClusterReports(HideClusterReports event, Emitter<MapState> emit) {
     emit(state.copyWith(
       showClusterReports: false,
       clusterReports: null,
     ));
   }
-
 }

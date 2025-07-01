@@ -1,61 +1,93 @@
 part of 'map_bloc.dart';
 
-// Enum for the state of tracking
+/// Enum that represents the status of tracking functionality.
 enum MapTrackingStatus { initial, loading, tracking, stopped, error }
 
-/// Holds the current state of the map, including controller, zoom level, routes, and tracking info
+/// The state class used by the MapBloc.
+/// Holds all data required to render and manage the map UI, including navigation, tracking, clusters, and annotations.
 class MapState extends Equatable {
-  /// The Mapbox map controller
+  /// The active Mapbox controller for controlling camera, annotations, etc.
   final mapbox.MapboxMap? mapController;
-  /// The zoom level of the map
+
+  /// Current zoom level of the map.
   final double zoomLevel;
-  /// List of main route coordinates displayed on the map
+
+  /// The main route currently displayed (list of lat/lng pairs).
   final List<List<double>> mainRoute;
-  /// List of alternative routes (each is a list of coordinates)
+
+  /// Alternative route options (as raw geometry or decoded polyline).
   final List<dynamic> alternativeRoutes;
-  /// Annotations related to categories (e.g., points of interest, POI)
+
+  /// Annotations shown as category-specific markers (e.g., POIs).
   final Set<mapbox.PointAnnotation> categoryAnnotations;
-  /// A map that associates Mapbox IDs with internal IDs. Map<InternalId, MapboxId>
+
+  /// Maps internal annotation IDs to their Mapbox IDs.
   final Map<String, String> annotationIdMap;
-  /// A map that associates Mapbox IDs with MapboxFeature objects. Map<MapboxId, MapboxFeature>
+
+  /// Maps Mapbox IDs to their corresponding feature metadata.
   final Map<String, MapboxFeature> featureMap;
 
-  // --- Properties for navigation ---
-  /// List of navigation steps for the current route
+  // --- Navigation-specific state ---
+
+  /// Navigation steps along the current route.
   final List<NavigationStep> routeSteps;
-  /// Whether the user is currently navigating
+
+  /// Whether navigation mode is currently active.
   final bool isNavigating;
-  /// The index of the current navigation step
+
+  /// Index of the current step in the navigation sequence.
   final int currentStepIndex;
-  /// Whether voice instructions are enabled
+
+  /// Whether voice instructions are currently enabled.
   final bool isVoiceEnabled;
 
+  /// Whether alternative routes are being displayed.
   final bool showAlternatives;
 
+  // --- Tracking-specific state ---
 
-  // --- Properties for tracking ---
-  /// Whether the user is currently tracking its location
+  /// Whether location tracking is currently active.
   final bool isTracking;
-  /// List of tracked route coordinates
+
+  /// The path of positions tracked so far.
   final List<geolocator.Position> trackedRoute;
-  /// The current tracked position
+
+  /// The most recent tracked position (null if not available).
   final geolocator.Position? currentTrackedPosition;
-  /// The current status of tracking
+
+  /// The status of tracking (e.g., tracking, stopped, error).
   final MapTrackingStatus trackingStatus;
-  /// Error message if tracking fails
+
+  /// Error message in case tracking fails.
   final String? errorMessage;
+
+  /// Whether the camera should follow the user’s location.
   final bool isCameraFollowing;
+
+  /// Whether the user is currently considered off-route during navigation.
   final bool isOffRoute;
+
+  /// The last event that triggered a state change (used for diagnostics or feedback).
   final MapEvent? lastEvent;
+
+  /// Whether the map has finished initializing and is ready to interact with.
   final bool isMapReady;
+
+  // --- Cluster-related state ---
+
+  /// List of clusters, where each cluster is a list of report maps.
   final List<List<Map<String, dynamic>>> clusters;
+
+  /// Whether to show reports for a selected cluster.
   final bool showClusterReports;
+
+  /// Reports for the currently selected cluster.
   final List<Map<String, dynamic>>? clusterReports;
+
+  /// Maps annotation IDs to their corresponding index in the cluster list.
   final Map<String, int> clusterAnnotationIdMap;
 
-
-
-  // Constructor with default values
+  /// Constructor for MapState. Most fields have sensible defaults to allow incremental updates.
   const MapState({
     this.mapController,
     this.zoomLevel = 14.0,
@@ -84,10 +116,10 @@ class MapState extends Equatable {
     this.clusterAnnotationIdMap = const {},
   });
 
-  // Returns the initial state
+  /// Creates the default initial state.
   factory MapState.initial() => const MapState();
 
-  // Method to copy the current state with new values for fields
+  /// Creates a modified copy of the current state, updating only the specified fields.
   MapState copyWith({
     mapbox.MapboxMap? mapController,
     double? zoomLevel,
@@ -178,10 +210,9 @@ class MapState extends Equatable {
   ];
 }
 
-/// State emitted when a specific point annotation (marker) on the map is clicked.
-/// Contains the ID needed to retrieve more details about the annotation.
+/// State emitted when a specific annotation (marker) is tapped.
+/// This subclass allows special handling of the clicked marker via [mapboxId] and [feature].
 class MapAnnotationClicked extends MapState {
-  /// The unique identifier (e.g., Mapbox ID) of the clicked annotation.
   final String mapboxId;
   final MapboxFeature feature;
 
@@ -204,15 +235,19 @@ class MapAnnotationClicked extends MapState {
   List<Object?> get props => [mapboxId, feature];
 }
 
+/// State emitted when an action (e.g., saving route, stopping nav) completes successfully.
 class ActionCompleted extends MapState {}
 
+/// State emitted when an action fails.
+/// Contains a descriptive error [message] for display or logging.
 class ActionFailed extends MapState {
   final String message;
   ActionFailed(this.message);
 }
 
+/// State emitted when a cluster marker is clicked.
+/// Carries the reports associated with that cluster.
 class ClusterAnnotationClicked extends MapState {
-  /// The unique identifier (e.g., Mapbox ID) of the clicked annotation.
   final List<Map<String, dynamic>> clusterId;
 
   ClusterAnnotationClicked(this.clusterId, MapState previousState) : super(

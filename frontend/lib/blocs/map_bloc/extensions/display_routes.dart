@@ -1,10 +1,14 @@
 part of '../map_bloc.dart';
 
+/// Extension on MapBloc to handle the display of routes and alternative paths.
 extension MapBlocDisplay on MapBloc {
+
+  /// Fetches route data from the MapService based on the user's location and selected destination.
+  /// If `alternatives` is true, the API will return multiple route options.
   Future<Map<String, dynamic>?> _fetchRoute(
-    MapboxFeature feature,
-    bool alternatives,
-  ) async {
+      MapboxFeature feature,
+      bool alternatives,
+      ) async {
     if (feature == null) {
       print("Attempted to navigate but feature was null.");
       return null;
@@ -55,6 +59,8 @@ extension MapBlocDisplay on MapBloc {
     return null;
   }
 
+  /// Parses a single route object into a usable format for display and navigation.
+  /// Extracts steps, coordinates, color, and accessibility score.
   Map<dynamic, dynamic>? getRoute(dynamic routeObject) {
     if (routeObject == null ||
         routeObject['coordinates'] == null ||
@@ -65,21 +71,23 @@ extension MapBlocDisplay on MapBloc {
 
     final coordinates = routeObject['coordinates'] as List;
 
+    // Convert [lng, lat] to [lat, lng] for Mapbox compatibility
     final fixedLineCoordinates =
-        coordinates.map<List<double>>((c) {
-          if (c is List && c.length >= 2) {
-            return [c[1].toDouble(), c[0].toDouble()]; // lat, lng για Mapbox
-          } else {
-            throw Exception('Invalid coordinate format');
-          }
-        }).toList();
+    coordinates.map<List<double>>((c) {
+      if (c is List && c.length >= 2) {
+        return [c[1].toDouble(), c[0].toDouble()]; // lat, lng for Mapbox
+      } else {
+        throw Exception('Invalid coordinate format');
+      }
+    }).toList();
 
-    // === Extract instructions from steps ===
+    // Extract additional route metadata
     final instructionsList = routeObject['instructions'];
     final accessibilityScore = routeObject['accessibilityScore'];
     final colorHex = routeObject['color'];
     final List<NavigationStep> routeSteps = [];
 
+    // Parse instructions into step objects
     if (instructionsList is List) {
       for (final step in instructionsList) {
         try {
@@ -87,6 +95,7 @@ extension MapBlocDisplay on MapBloc {
         } catch (_) {}
       }
     }
+
     return {
       'coordinates': fixedLineCoordinates,
       'routeSteps': routeSteps,
@@ -95,7 +104,8 @@ extension MapBlocDisplay on MapBloc {
     };
   }
 
-
+  /// Displays multiple alternative routes on the map.
+  /// Each route is added as a separate line layer with a color based on accessibility score.
   Future<void> _onDisplayAlternativeRoutes(DisplayAlternativeRoutes event, Emitter<MapState> emit,) async {
     try {
       final map = state.mapController;
@@ -105,10 +115,12 @@ extension MapBlocDisplay on MapBloc {
         );
         return;
       }
+
       final route = await _fetchRoute(event.feature, true);
       final routes = route!['routes'] as List<dynamic>?;
       var alternativeRoutes = [];
-      await _remove();
+
+      await _remove(); // Clear previous route layers
 
       for (int i = 0; i < routes!.length; i++) {
         final route = routes[i];
@@ -116,9 +128,13 @@ extension MapBlocDisplay on MapBloc {
         final coordinates = r!['coordinates'];
         final List<NavigationStep> routeSteps = r['routeSteps'];
         final accessibilityScore = r['accessibilityScore'];
+
+        // Add line to map
         await _addLine(coordinates, i, accessibilityScore);
         alternativeRoutes.add(r);
       }
+
+      // Emit updated state with alternative routes
       emit(
         state.copyWith(
           errorMessageGetter: () => null,
@@ -134,41 +150,48 @@ extension MapBlocDisplay on MapBloc {
     }
   }
 
+  /// Adds a single route line to the map using a specific color.
+  /// Uses the index `i` to create unique IDs for source/layer to avoid conflicts.
   Future<void> _addLine(
-        List<dynamic> fixedRoute,
-        int i,
-        double? accessibilityScore,
-        ) async {
-      final style = state.mapController?.style;
+      List<dynamic> fixedRoute,
+      int i,
+      double? accessibilityScore,
+      ) async {
+    final style = state.mapController?.style;
 
-      final sourceId = 'alt-route-source-$i';
-      final layerId = 'alt-route-layer-$i';
-      print("Adding line with color: $accessibilityScore");
-      final List<int> routeColors = [
-        Colors.blue.value,
-        Colors.green.value,
-        Colors.red.value,
-        Colors.orange.value,
-        Colors.purple.value,
-      ];
+    final sourceId = 'alt-route-source-$i';
+    final layerId = 'alt-route-layer-$i';
+    print("Adding line with color: $accessibilityScore");
 
-      fixedRoute = fixedRoute.map((coord) => [coord[1], coord[0]]).toList();
-      final geojson = {
-        "type": "FeatureCollection",
-        "features": [
-          {
-            "type": "Feature",
-            "geometry": {"type": "LineString", "coordinates": fixedRoute},
-            "properties": {},
-          },
-        ],
-      };
+    final List<int> routeColors = [
+      Colors.blue.value,
+      Colors.green.value,
+      Colors.red.value,
+      Colors.orange.value,
+      Colors.purple.value,
+    ];
 
-      print(fixedRoute);
+    // Ensure coordinates are in [lng, lat] format for GeoJSON
+    fixedRoute = fixedRoute.map((coord) => [coord[1], coord[0]]).toList();
 
-      await style?.addSource(
+    final geojson = {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {"type": "LineString", "coordinates": fixedRoute},
+          "properties": {},
+        },
+      ],
+    };
+
+    print(fixedRoute);
+
+    // Add route as a new source and layer
+    await style?.addSource(
       mapbox.GeoJsonSource(id: sourceId, data: jsonEncode(geojson)),
     );
+
     await style?.addLayer(
       mapbox.LineLayer(
         id: layerId,
@@ -181,13 +204,16 @@ extension MapBlocDisplay on MapBloc {
     );
   }
 
+  /// Handles event to remove all displayed alternative routes from the map.
   Future<void> _onRemoveAlternativeRoutes(
-    RemoveAlternativeRoutes event,
-    Emitter<MapState> emit,
-  ) async {
+      RemoveAlternativeRoutes event,
+      Emitter<MapState> emit,
+      ) async {
     await _remove();
   }
 
+  /// Removes all map layers and sources related to alternative routes.
+  /// Iterates through numbered layers until none are found.
   Future<void> _remove() async {
     final style = state.mapController?.style;
     if (style == null) return;
@@ -215,6 +241,8 @@ extension MapBlocDisplay on MapBloc {
     }
   }
 
+  /// Converts an accessibility score (0.0 - 1.0) into a color.
+  /// Used to visually differentiate routes based on their accessibility level.
   Color makeColor(double accessibilityScore) {
     if (accessibilityScore == 0) return Colors.blue;
     if (accessibilityScore < 0.4) return Colors.red;
