@@ -4,7 +4,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../models/navigation_step.dart';
 import '../blocs/map_bloc/map_bloc.dart';
 
+/// A horizontally scrolling card widget displaying a list of navigation steps.
+/// Highlights the current step and automatically scrolls to it when changed.
 class DirectionsCard extends StatefulWidget {
+  /// The list of navigation steps to display.
   final List<NavigationStep> steps;
 
   const DirectionsCard({Key? key, required this.steps}) : super(key: key);
@@ -14,8 +17,11 @@ class DirectionsCard extends StatefulWidget {
 }
 
 class _DirectionsCardState extends State<DirectionsCard> {
+  /// Controller to programmatically scroll the horizontal list.
   late ScrollController _scrollController;
-  int _currentStep = 0; // internal state
+
+  /// Index of the current active navigation step.
+  int _currentStep = 0;
 
   @override
   void initState() {
@@ -29,6 +35,7 @@ class _DirectionsCardState extends State<DirectionsCard> {
     super.dispose();
   }
 
+  /// Scrolls the horizontal list so that the current step is visible.
   void _scrollToCurrentStep() {
     final double offset = _currentStep * (250 + 16);
     _scrollController.animateTo(
@@ -41,7 +48,8 @@ class _DirectionsCardState extends State<DirectionsCard> {
   @override
   Widget build(BuildContext context) {
     return BlocListener<MapBloc, MapState>(
-      listenWhen: (previous, current) => previous.currentStepIndex != current.currentStepIndex,
+      listenWhen: (previous, current) =>
+      previous.currentStepIndex != current.currentStepIndex,
       listener: (context, state) {
         setState(() {
           _currentStep = state.currentStepIndex;
@@ -62,7 +70,8 @@ class _DirectionsCardState extends State<DirectionsCard> {
               margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isActive ? Theme.of(context).primaryColor : Theme.of(context).cardColor,
+                color:
+                isActive ? Theme.of(context).primaryColor : Theme.of(context).cardColor,
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: isActive
                     ? [
@@ -86,8 +95,11 @@ class _DirectionsCardState extends State<DirectionsCard> {
                       child: Text(
                         step.instruction,
                         style: TextStyle(
-                          color: isActive ? Colors.white : Theme.of(context).textTheme.bodyMedium?.color,
-                          fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                          color: isActive
+                              ? Colors.white
+                              : Theme.of(context).textTheme.bodyMedium?.color,
+                          fontWeight:
+                          isActive ? FontWeight.bold : FontWeight.normal,
                           fontSize: 16,
                         ),
                         textAlign: TextAlign.center,
@@ -103,16 +115,22 @@ class _DirectionsCardState extends State<DirectionsCard> {
     );
   }
 
+  /// Returns an icon widget representing the direction indicated in the instruction text.
+  /// Checks for Greek direction keywords and defaults to a generic directions icon.
   Widget getDirectionIcon(String instruction) {
     final instr = instruction.toLowerCase();
     if (instr.contains('δεξιά') || instr.contains('δεξια')) {
-      return const Icon(Icons.arrow_circle_right_outlined, size: 32, color: Colors.orange);
+      return const Icon(Icons.arrow_circle_right_outlined,
+          size: 32, color: Colors.orange);
     } else if (instr.contains('αριστερά') || instr.contains('αριστερα')) {
-      return const Icon(Icons.arrow_circle_left_outlined, size: 32, color: Colors.orange);
+      return const Icon(Icons.arrow_circle_left_outlined,
+          size: 32, color: Colors.orange);
     } else if (instr.contains('ευθεία') || instr.contains('ευθεια')) {
-      return const Icon(Icons.arrow_circle_up_outlined, size: 32, color: Colors.orange);
+      return const Icon(Icons.arrow_circle_up_outlined,
+          size: 32, color: Colors.orange);
     } else if (instr.contains('πίσω') || instr.contains('πισω')) {
-      return const Icon(Icons.arrow_circle_down_outlined, size: 32, color: Colors.orange);
+      return const Icon(Icons.arrow_circle_down_outlined,
+          size: 32, color: Colors.orange);
     }
     return const Icon(Icons.directions, size: 32, color: Colors.white);
   }

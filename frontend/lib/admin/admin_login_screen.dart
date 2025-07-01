@@ -1,6 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+/// Screen that provides a login form for admin users.
+/// Handles input validation, sign-in with Firebase Auth,
+/// and displays errors or loading states accordingly.
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
 
@@ -15,6 +18,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
+  /// Attempts to sign in using email and password.
+  /// Shows loading indicator and handles errors with messages.
   Future<void> _signIn() async {
     if (_formKey.currentState?.validate() ?? false) {
       setState(() {
@@ -26,13 +31,13 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
-        // Η πλοήγηση γίνεται αυτόματα από το AuthGate/StreamBuilder
+        // Navigation happens automatically via AuthGate / StreamBuilder
       } on FirebaseAuthException catch (e) {
         setState(() {
           _errorMessage = e.message ?? 'Παρουσιάστηκε άγνωστο σφάλμα.';
         });
       } finally {
-        // Έλεγχος αν το widget υπάρχει ακόμα πριν καλέσεις setState
+        // Only update state if widget is still mounted
         if (mounted) {
           setState(() {
             _isLoading = false;
@@ -42,6 +47,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     }
   }
 
+  /// Dispose controllers to avoid memory leaks.
   @override
   void dispose() {
     _emailController.dispose();
@@ -49,6 +55,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     super.dispose();
   }
 
+  /// Builds the UI for the Admin login screen.
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -57,7 +64,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         child: Padding(
           padding: const EdgeInsets.all(20.0),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400), // Όριο πλάτους για web
+            constraints: const BoxConstraints(maxWidth: 400), // Limit width for web
             child: Form(
               key: _formKey,
               child: Column(

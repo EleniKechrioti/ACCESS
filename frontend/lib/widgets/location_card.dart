@@ -9,8 +9,16 @@ import '../models/mapbox_feature.dart';
 import '../utils/metadata_utils.dart';
 import 'favourites_button.dart';
 
+/// A card widget displaying detailed information about a specific location,
+/// including its name, address, categories, accessibility, coordinates,
+/// navigation and sharing actions, as well as user comments.
+///
+/// If `feature2` is provided, additional metadata (e.g., phone, website) is shown.
 class LocationInfoCard extends StatefulWidget {
+  /// Primary location feature.
   final MapboxFeature? feature;
+
+  /// Secondary location feature used for additional metadata display.
   final MapboxFeature? feature2;
 
   const LocationInfoCard({super.key, required this.feature, this.feature2});
@@ -23,6 +31,7 @@ class _LocationInfoCardState extends State<LocationInfoCard> {
   @override
   void initState() {
     super.initState();
+    /// Load comments related to the primary location feature on init
     if (widget.feature != null) {
       context.read<LocationCommentsCubit>().fetchComments(widget.feature!.id);
     }
@@ -31,6 +40,7 @@ class _LocationInfoCardState extends State<LocationInfoCard> {
   @override
   Widget build(BuildContext context) {
     if (widget.feature == null) return const SizedBox.shrink();
+
     ParsedMetadata? metadata;
     if (widget.feature2 != null) {
       metadata = createMetaData(widget.feature2!.metadata);
@@ -73,6 +83,8 @@ class _LocationInfoCardState extends State<LocationInfoCard> {
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: 4),
+
+          /// Show categories if not empty or only 'address'
           if (widget.feature?.poiCategory != null &&
               widget.feature!.poiCategory.isNotEmpty &&
               !(widget.feature!.poiCategory.length == 1 &&
@@ -122,6 +134,8 @@ class _LocationInfoCardState extends State<LocationInfoCard> {
             ),
           ),
           const SizedBox(height: 12),
+
+          /// Buttons for navigation, directions, call, share and add comment actions
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -148,6 +162,8 @@ class _LocationInfoCardState extends State<LocationInfoCard> {
                   ),
                 ),
                 const SizedBox(width: 10),
+
+                /// Show call button only if phone metadata is present
                 if (widget.feature2 != null && metadata?.phone != null)
                   ElevatedButton.icon(
                     onPressed: () => context.read<MapBloc>().add(LaunchPhoneDialerRequested(metadata?.phone)),
@@ -191,9 +207,14 @@ class _LocationInfoCardState extends State<LocationInfoCard> {
             ),
           ),
           const SizedBox(height: 12),
+
+          /// Displays additional metadata if available
           if (widget.feature2 != null)
             buildMetadataFromList(widget.feature2?.metadata),
+
           const SizedBox(height: 12),
+
+          /// Comments section - shows loading, error, or list of comments
           BlocBuilder<LocationCommentsCubit, LocationCommentsState>(
             builder: (context, state) {
               if (state is LocationCommentsLoading) {
@@ -219,6 +240,7 @@ class _LocationInfoCardState extends State<LocationInfoCard> {
     );
   }
 
+  /// Builds a widget displaying a single comment including optional photo and timestamp.
   Widget _buildCommentItem(Comment comment, BuildContext context) {
     final theme = Theme.of(context);
     return Card(
@@ -257,6 +279,8 @@ class _LocationInfoCardState extends State<LocationInfoCard> {
     );
   }
 
+  /// Formats the timestamp of a comment into a relative time string.
+  /// Examples: "Τώρα", "5 λεπτά πριν", "2 ώρες πριν", or date string.
   String _formatTimestamp(DateTime timestamp) {
     final now = DateTime.now();
     final diff = now.difference(timestamp);

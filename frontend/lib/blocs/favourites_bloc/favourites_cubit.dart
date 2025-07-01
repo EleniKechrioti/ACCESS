@@ -8,15 +8,17 @@ part 'favourites_state.dart';
 
 class FavoritesCubit extends Cubit<FavoritesState> {
 
-  /// Firebase Authentication service instance. Used to get the current user.
+  /// Firebase Auth instance for current user info.
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  /// Firestore database service instance. Used to save the report data.
+  /// Firestore instance for reading/writing favorites data.
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   FavoritesCubit() : super(FavoritesInitial()) {
-    loadFavorites();
+    loadFavorites(); // Load favorites right when Cubit starts
   }
 
+  /// Loads user's favorite places from Firestore.
+  /// Emits loading state, then loaded or error.
   void loadFavorites() async {
     final currentUser = _auth.currentUser;
     emit(FavoritesLoading());
@@ -27,6 +29,7 @@ class FavoritesCubit extends Cubit<FavoritesState> {
           .collection('favorites')
           .get();
 
+      // Map doc IDs to their data
       final favs = {
         for (var doc in snapshot.docs)
           doc.id: doc.data()
@@ -38,9 +41,13 @@ class FavoritesCubit extends Cubit<FavoritesState> {
     }
   }
 
+  /// Toggles favorite status of a feature:
+  /// - If already favorite, deletes it from Firestore and local map
+  /// - If not favorite, adds it in Firestore and local map
   void toggleFavorite({required feature}) async {
     if (state is! FavoritesLoaded) return;
 
+    // Copy current favorites map to update
     final current = Map<String, dynamic>.from((state as FavoritesLoaded).favorites);
 
     final currentUser = _auth.currentUser;
@@ -66,6 +73,7 @@ class FavoritesCubit extends Cubit<FavoritesState> {
     emit(FavoritesLoaded(current));
   }
 
+  /// Checks if a place is marked as favorite.
   bool isFavorite(String placeId) {
     if (state is FavoritesLoaded) {
       return (state as FavoritesLoaded).favorites.containsKey(placeId);

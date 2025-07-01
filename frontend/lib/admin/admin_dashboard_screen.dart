@@ -2,8 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'report_model.dart'; // Import το μοντέλο
+import 'report_model.dart';
 
+/// Admin dashboard screen displaying reports from Firestore.
+/// Allows approving or deleting reports, including image management in Firebase Storage.
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
 
@@ -16,9 +18,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
-  // --- Approve Report ---
+  /// Shows a confirmation dialog and approves the report with the given [reportId].
+  /// Updates Firestore fields 'isApproved' and 'approvedTimestamp'.
   Future<void> _approveReport(String reportId) async {
-    if (!mounted) return; // Έλεγχος αν το widget υπάρχει ακόμα
+    if (!mounted) return; // Safety check if widget is disposed
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -52,7 +55,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
   }
 
-  // --- Delete Report ---
+  /// Shows a confirmation dialog and deletes the report and its image (if any).
+  /// First deletes the image from Firebase Storage, then deletes the Firestore document.
   Future<void> _deleteReport(Report report) async {
     if (!mounted) return;
     final confirmed = await showDialog<bool>(
@@ -72,7 +76,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     if (confirmed == true) {
       try {
-        // 1. Διαγραφή εικόνας (αν υπάρχει)
+        // 1. Delete image from Firebase Storage (if exists)
         if (report.imageUrl != null && report.imageUrl!.isNotEmpty) {
           try {
             final imageRef = _storage.refFromURL(report.imageUrl!);
@@ -80,7 +84,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             print('Image deleted from Storage: ${report.imageUrl}');
           } catch (storageError) {
             print('Could not delete image ${report.imageUrl} from Storage: $storageError');
-            // Συνεχίζουμε ακόμα κι αν η διαγραφή εικόνας απέτυχε
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Προειδοποίηση: Αδυναμία διαγραφής εικόνας από Storage. ${storageError.toString()}'), backgroundColor: Colors.orange));
@@ -88,7 +91,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           }
         }
 
-        // 2. Διαγραφή εγγράφου Firestore
+        // 2. Delete Firestore document
         final reportRef = _firestore.collection('reports').doc(report.id);
         await reportRef.delete();
 
@@ -106,7 +109,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       }
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -126,14 +128,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               tooltip: 'Αποσύνδεση',
               onPressed: () async {
                 await _auth.signOut();
-                // Η πλοήγηση γίνεται αυτόματα από το AuthGate/StreamBuilder
+                // Navigation handled automatically by AuthGate/StreamBuilder
               },
             )
           ]
         ],
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        // Άλλαξε το query αν θέλεις να φιλτράρεις (π.χ., μόνο τα μη εγκεκριμένα)
+        // You can filter reports here (e.g. only unapproved reports)
         stream: _firestore.collection('reports').orderBy('timestamp', descending: true).snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -146,15 +148,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             return const Center(child: Text('Δεν υπάρχουν αναφορές.'));
           }
 
-          // Έχουμε δεδομένα, φτιάχνουμε λίστα
+          // Convert Firestore docs to Report models, ignoring errors
           final reports = snapshot.data!.docs.map((doc) {
             try {
               return Report.fromFirestore(doc);
             } catch (e) {
               print("Error parsing report ${doc.id}: $e");
-              return null; // Αγνοούμε έγγραφα με λάθος σχήμα
+              return null;
             }
-          }).whereType<Report>().toList(); // Φιλτράρουμε τα nulls
+          }).whereType<Report>().toList();
 
           return ListView.builder(
             padding: const EdgeInsets.all(10.0),
@@ -184,7 +186,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       if (report.imageUrl != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 8.0),
-                          child: Image.network(report.imageUrl!, height: 100, fit: BoxFit.cover,
+                          child: Image.network(
+                            report.imageUrl!,
+                            height: 100,
+                            fit: BoxFit.cover,
                             loadingBuilder: (context, child, loadingProgress) {
                               if (loadingProgress == null) return child;
                               return const Center(child: CircularProgressIndicator());

@@ -10,6 +10,7 @@ import '../models/comment.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 class PublishCommentModal extends StatefulWidget {
+  /// ID of the location this comment belongs to
   final String locationId;
   const PublishCommentModal({required this.locationId, Key? key}) : super(key: key);
 
@@ -18,12 +19,19 @@ class PublishCommentModal extends StatefulWidget {
 }
 
 class _PublishCommentModalState extends State<PublishCommentModal> {
+  /// Controller to manage the comment text input
   final _textController = TextEditingController();
+
+  /// Selected image file for the comment, if any
   File? _pickedImage;
+
+  /// Indicates if a submission/upload is in progress
   bool _loading = false;
 
+  /// Image picker instance to select images from gallery
   final _picker = ImagePicker();
 
+  /// Opens the device gallery to pick an image
   Future<void> _pickImage() async {
     final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
     if (picked != null) {
@@ -33,17 +41,23 @@ class _PublishCommentModalState extends State<PublishCommentModal> {
     }
   }
 
+  /// Uploads the selected image to Firebase Storage and returns its download URL
   Future<String?> _uploadImage(File file) async {
-    final storageRef = FirebaseStorage.instance.ref().child('comments_images/${DateTime.now().millisecondsSinceEpoch}.jpg');
+    final storageRef = FirebaseStorage.instance
+        .ref()
+        .child('comments_images/${DateTime.now().millisecondsSinceEpoch}.jpg');
     final uploadTask = storageRef.putFile(file);
     final snapshot = await uploadTask.whenComplete(() {});
     final url = await snapshot.ref.getDownloadURL();
     return url;
   }
 
+  /// Handles submitting the comment along with optional image upload
   Future<void> _submit() async {
+    /// Validate that there is at least text or image
     if (_textController.text.isEmpty && _pickedImage == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Πρέπει να προσθέσεις σχόλιο ή φωτογραφία')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Πρέπει να προσθέσεις σχόλιο ή φωτογραφία')));
       return;
     }
 
@@ -54,6 +68,7 @@ class _PublishCommentModalState extends State<PublishCommentModal> {
       photoUrl = await _uploadImage(_pickedImage!);
     }
 
+    /// Create a comment object to send
     final comment = Comment(
       id: Uuid().v4(),
       userId: FirebaseAuth.instance.currentUser!.uid,
@@ -62,10 +77,11 @@ class _PublishCommentModalState extends State<PublishCommentModal> {
       timestamp: DateTime.now(),
     );
 
+    /// Add the comment using the cubit
     await context.read<LocationCommentsCubit>().addComment(widget.locationId, comment);
 
     setState(() { _loading = false; });
-    Navigator.of(context).pop(true);
+    Navigator.of(context).pop(true); // Close the modal, indicate success
   }
 
   @override

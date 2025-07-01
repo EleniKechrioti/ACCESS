@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'admin_dashboard_screen.dart';
 import 'admin_login_screen.dart';
 
+/// Widget that controls access to the admin dashboard by listening to Firebase
+/// authentication state changes. It displays the login screen if the user is not
+/// authenticated, or the admin dashboard if authenticated.
 class AdminAuthGate extends StatelessWidget {
   const AdminAuthGate({super.key});
 
@@ -11,29 +14,20 @@ class AdminAuthGate extends StatelessWidget {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // Αν περιμένουμε ακόμα την αρχική κατάσταση auth
+        /// While waiting for the auth state to initialize, show a loading spinner.
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
 
-        // Αν ο χρήστης είναι συνδεδεμένος
+        /// If the user is authenticated, show the admin dashboard.
+        /// TODO: Optionally verify admin privileges here (e.g., by checking email or claims).
         if (snapshot.hasData) {
-          // TODO: Προαιρετικά, έλεγξε εδώ αν ο συνδεδεμένος χρήστης ΕΙΝΑΙ admin
-          // π.χ., ελέγχοντας το email του ή ένα custom claim από το Firebase Auth
-          // if (snapshot.data!.email == 'admin@example.com') {
           return const AdminDashboardScreen();
-          // } else {
-          //   // Δεν είναι admin, δείξε μήνυμα ή τη login screen ξανά;
-          //   // Εδώ θα μπορούσε να γίνει αυτόματη αποσύνδεση και εμφάνιση login
-          //    print("User ${snapshot.data!.email} is not authorized admin.");
-          //    FirebaseAuth.instance.signOut(); // Κάνε τον logout
-          //    return const AdminLoginScreen(); // Δείξε login
-          // }
         }
 
-        // Αν ο χρήστης ΔΕΝ είναι συνδεδεμένος
+        /// If no user is authenticated, show the login screen.
         return const AdminLoginScreen();
       },
     );
