@@ -19,7 +19,8 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import '../theme/app_colors.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Main entry point for the application
 ///
@@ -38,6 +39,14 @@ import '../theme/app_colors.dart';
 Future<void> main() async {
   // Initialize Flutter framework bindings
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load env variables
+  await dotenv.load(fileName: ".env");
+
+  await Supabase.initialize(
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+  );
 
   // Securely retrieve Mapbox access token from build arguments
   const ACCESS_TOKEN = String.fromEnvironment("token");
@@ -95,6 +104,7 @@ Future<void> main() async {
 /// such as within notification handlers or background processes.
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+final supabase = Supabase.instance.client;
 
 
 class MyApp extends StatefulWidget {

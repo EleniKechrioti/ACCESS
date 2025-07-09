@@ -67,6 +67,8 @@ dependencies:
   url_launcher: ^6.1.5
   share_plus: ^11.0.0              # Share functionality
   app_links: ^6.4.0                # Universal link handling
+  supabase_flutter: ^2.9.1
+  flutter_dotenv: ^5.2.1
 
 # Development tools
 dev_dependencies:
@@ -89,3 +91,4 @@ flutter:
   # Asset management
   assets:
     - assets/images/             # Image resources directory
+    - .env                        # Environment variables file
