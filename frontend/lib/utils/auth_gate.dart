@@ -1,43 +1,43 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-// Adjust import paths based on your project structure
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../blocs/my_account_bloc/my_account_bloc.dart';
 import '../screens/login_screen.dart';
 import '../screens/myaccount_screen.dart';
-/// A widget that acts as an authentication gate.
-///
-/// Listens to Firebase authentication state changes ([FirebaseAuth.instance.authStateChanges])
-/// and displays either the [MyAccountScreen] if a user is logged in,
-/// or the [LoginScreen] if no user is logged in. It shows a loading indicator
-/// while waiting for the initial authentication state.
-class AuthGate extends StatelessWidget {
-  /// Creates a const [AuthGate].
+
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
 
   @override
-  /// Builds the widget tree based on the authentication state.
-  ///
-  /// Uses a [StreamBuilder] to reactively rebuild when the auth state changes.
-  /// It displays:
-  /// - A loading indicator while waiting for the connection.
-  /// - [MyAccountScreen] if the user is authenticated ([snapshot.hasData] is true).
-  /// - [LoginScreen] if the user is not authenticated.
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  late final Stream<AuthState> _authStateStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _authStateStream = Supabase.instance.client.auth.onAuthStateChange;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      // Listen to the stream of authentication state changes from Firebase Auth.
-      stream: FirebaseAuth.instance.authStateChanges(),
+    return StreamBuilder<AuthState>(
+      stream: _authStateStream,
       builder: (context, snapshot) {
-        // Show a loading indicator while waiting for the initial auth state result.
+        final session = Supabase.instance.client.auth.currentSession;
+
+        // While waiting for auth state (especially first time app opens)
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold( // Provides a basic layout during loading
+          return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
 
-        // If the snapshot contains user data, the user is signed in.
-        if (snapshot.hasData) {
-          // Προσθήκη έλεγχου για signed out κατάσταση
+        if (session != null) {
+          // User is signed in
           return BlocListener<MyAccountBloc, MyAccountState>(
             listener: (context, state) {
               if (state is MyAccountSignedOut) {
@@ -48,8 +48,7 @@ class AuthGate extends StatelessWidget {
           );
         }
 
-        // If the snapshot has no data, the user is signed out.
-        // Display the login screen.
+        // Not signed in
         return LoginScreen();
       },
     );

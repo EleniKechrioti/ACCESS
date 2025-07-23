@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../blocs/map_bloc/map_bloc.dart';
 import '../blocs/report_obstacle_bloc/report_obstacle_bloc.dart';
 import '../blocs/search_bloc/search_bloc.dart';
@@ -115,7 +115,7 @@ class BottomNavBar extends StatelessWidget {
   /// - Responsive layout
   @override
   Widget build(BuildContext context) {
-    final User? user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
 
     return Container(
       height: 55,

@@ -1,6 +1,5 @@
 import 'package:email_validator/email_validator.dart';
 import 'package:equatable/equatable.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,8 +9,6 @@ part 'login_state.dart';
 
 /// The BLoC class that manages the login logic and state
 class LoginBloc extends Bloc<LoginEvent, LoginState> {
-  // Firebase authentication instance
-  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
 
   // Google Sign-In instance
   final GoogleSignIn _googleSignIn = GoogleSignIn();
@@ -51,35 +48,57 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
   }
 
   /// Handles the Google login submission
-  Future<void> _onLoginWithGoogleSubmitted(LoginWithGoogleSubmitted event, Emitter<LoginState> emit) async {
-    // Set the state to loading while Google login is in progress
+  Future<void> _onLoginWithGoogleSubmitted(
+      LoginWithGoogleSubmitted event,
+      Emitter<LoginState> emit,
+      ) async {
     emit(state.copyWith(status: LoginStatus.loading));
-    try {
-      // Attempt to sign in with Google
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
-      // If the user cancels the Google sign-in, revert the state to initial
+    try {
+      // Step 1: Google Sign-In
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+
       if (googleUser == null) {
         emit(state.copyWith(status: LoginStatus.initial)); // canceled
         return;
       }
 
-      // Retrieve the authentication credentials from Google
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
 
-      // Use the Google credentials to authenticate with Firebase
-      final credential = GoogleAuthProvider.credential(
+      // Step 2: Sign in to Supabase with the Google tokens
+      final supabase = Supabase.instance.client;
+
+      final response = await supabase.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: googleAuth.idToken!,
         accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
       );
 
-      // Sign in to Firebase with the Google credentials
-      await _firebaseAuth.signInWithCredential(credential);
-      // If successful, update the state to success
+      if (response.user == null) {
+        emit(state.copyWith(
+          status: LoginStatus.failure,
+          error: 'Google sign-in failed.',
+        ));
+        return;
+      }
+
+      if (response.user != null) {
+        await supabase.from('users').upsert({
+          'id': response.user!.id,
+          'email': response.user!.email,
+          'avatar_url': response.user!.userMetadata?['avatar_url'] ?? '',
+          'date_of_birth': null,
+          'disability_type': null,
+        });
+      }
+
       emit(state.copyWith(status: LoginStatus.success));
+
     } catch (e) {
-      // If an error occurs, update the state to failure and show error message
-      emit(state.copyWith(status: LoginStatus.failure, error: e.toString()));
+      emit(state.copyWith(
+        status: LoginStatus.failure,
+        error: e.toString(),
+      ));
     }
   }
 }
