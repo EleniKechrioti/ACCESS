@@ -1,119 +1,130 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 part 'my_account_event.dart';
 part 'my_account_state.dart';
 
-/// A BLoC responsible for managing the state
-/// and logic related to the user's account information and actions like
-/// loading profile data, updating information, and signing out.
+/// BLoC class for managing user account state and actions.
+///
+/// Handles:
+/// - Loading the user's profile from Supabase.
+/// - Updating user information (date of birth, disability type).
+/// - Signing the user out.
 class MyAccountBloc extends Bloc<MyAccountEvent, MyAccountState> {
+  final supabase = Supabase.instance.client;
 
-  /// Initializes the BLoC.
-  /// Sets the initial state to [MyAccountInitial] and registers event handlers.
+  /// Initializes the bloc with the [MyAccountInitial] state,
+  /// and sets up event handlers.
   MyAccountBloc() : super(MyAccountInitial()) {
-    // Register the handler for loading the user profile.
     on<LoadUserProfile>(_onLoadUserProfile);
-    // Register the handler for sign-out requests.
     on<SignOutRequested>(_onSignOutRequested);
-    // Register the handler for updating user info (new event).
-    on<UpdateUserInfo>(_onUpdateUserInfo); // νέο event (new event)
+    on<UpdateUserInfo>(_onUpdateUserInfo);
   }
 
-  /// Handles the [LoadUserProfile] event.
+  /// Loads the authenticated user's profile from the 'users' table.
   ///
-  /// - Fetches the current authenticated user's data from Firebase Auth
-  /// and additional profile details from the Firestore 'users' collection.
-  /// - Emits [MyAccountLoading] while fetching, [MyAccountLoaded] on success,
-  /// or [MyAccountError] if the user is not logged in or an error occurs.
+  /// If no user row is found, a new record is inserted automatically.
+  /// Emits:
+  /// - [MyAccountLoading] when starting.
+  /// - [MyAccountLoaded] with user data on success.
+  /// - [MyAccountError] on failure.
   Future<void> _onLoadUserProfile(
       LoadUserProfile event, Emitter<MyAccountState> emit) async {
-    // Indicate that data loading has started.
     emit(MyAccountLoading());
-    try {
-      // Get the currently signed-in user from Firebase Authentication.
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        // If a user is logged in, fetch their corresponding document from Firestore.
-        final doc = await FirebaseFirestore.instance
-            .collection('users') // Target the 'users' collection.
-            .doc(user.uid)      // Get the document with the user's ID.
-            .get();             // Execute the fetch operation.
 
-        // Emit the loaded state with combined data from Auth and Firestore.
+    try {
+      final user = supabase.auth.currentUser;
+
+      if (user == null) {
+        emit(MyAccountError('User not logged in.'));
+        return;
+      }
+
+      final response = await supabase
+          .from('users')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
+
+      // If user row doesn't exist, insert a default one
+      if (response == null) {
+        await supabase.from('users').insert({
+          'id': user.id,
+          'email': user.email,
+          'avatar_url': user.userMetadata?['avatar_url'] ?? '',
+          'date_of_birth': null,
+          'disability_type': null,
+        });
+
         emit(MyAccountLoaded(
           email: user.email ?? '',
-          photoUrl: user.photoURL,
-          dateOfBirth: doc.data()?['dateOfBirth'],
-          disabilityType: doc.data()?['disabilityType'],
+          photoUrl: '',
+          dateOfBirth: null,
+          disabilityType: null,
         ));
-      } else {
-        // If no user is logged in, emit an error state.
-        emit(MyAccountError('User not logged in.'));
+        return;
       }
+
+      // Emit profile data
+      emit(MyAccountLoaded(
+        email: user.email ?? '',
+        photoUrl: response['avatar_url'],
+        dateOfBirth: response['date_of_birth'],
+        disabilityType: response['disability_type'],
+      ));
     } catch (e) {
-      // Catch any other errors during the process and emit an error state.
-      emit(MyAccountError(e.toString()));
+      emit(MyAccountError('Failed to load user profile: $e'));
     }
   }
 
-  /// Handles the [SignOutRequested] event.
+  /// Signs the current user out of Supabase Auth.
   ///
-  /// - Attempts to sign the current user out using Firebase Authentication.
-  /// - Emits [MyAccountSignedOut] on successful sign-out,
-  /// or [MyAccountError] if the sign-out process fails.
+  /// Emits:
+  /// - [MyAccountSignedOut] on success.
+  /// - [MyAccountError] on failure.
   Future<void> _onSignOutRequested(
       SignOutRequested event, Emitter<MyAccountState> emit) async {
     try {
-      await FirebaseAuth.instance.signOut();
+      await supabase.auth.signOut();
       emit(MyAccountSignedOut());
     } catch (e) {
-      emit(MyAccountError('Sign out failed.'));
+      emit(MyAccountError('Sign out failed: $e'));
     }
   }
 
-  /// Handles the [UpdateUserInfo] event.
+  /// Updates the user's additional profile information in the 'users' table.
   ///
-  /// - Updates the user's `dateOfBirth` and/or `disabilityType` fields
-  /// in their Firestore document using `set` with `merge: true`.
-  /// - Re-emits [MyAccountLoaded] with the updated information upon success,
-  /// or [MyAccountError] if the update fails or the user is not logged in.
+  /// Emits:
+  /// - Updated [MyAccountLoaded] state with new values.
+  /// - [MyAccountError] on failure or if user is not logged in.
   Future<void> _onUpdateUserInfo(
       UpdateUserInfo event, Emitter<MyAccountState> emit) async {
-    // Get the current user.
-    final user = FirebaseAuth.instance.currentUser;
-    // If no user is logged in, do nothing and exit.
-    if (user == null) return;
+    final user = supabase.auth.currentUser;
+
+    if (user == null) {
+      emit(MyAccountError('User not logged in.'));
+      return;
+    }
 
     try {
-      // Update the user's document in the 'users' collection.
-      // Using set with merge: true ensures only the specified fields are updated
-      // and existing fields are preserved.
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        // Update dateOfBirth if provided in the event
-        'dateOfBirth': event.dateOfBirth,
-        // Update disabilityType if provided in the event.
-        'disabilityType': event.disabilityType,
-      }, SetOptions(merge: true)); // Use merge option to avoid overwriting other fields.
+      await supabase.from('users').update({
+        'date_of_birth': event.dateOfBirth,
+        'disability_type': event.disabilityType,
+      }).eq('id', user.id);
 
-      // Check if the current state is MyAccountLoaded to access existing data.
       if (state is MyAccountLoaded) {
-        // Cast the current state to MyAccountLoaded to access its properties.
-        final currentState = state as MyAccountLoaded;
-        // Emit a new MyAccountLoaded state with the updated information.
+        final current = state as MyAccountLoaded;
+
         emit(MyAccountLoaded(
-          email: currentState.email,
-          photoUrl: currentState.photoUrl,
+          email: current.email,
+          photoUrl: current.photoUrl,
           dateOfBirth: event.dateOfBirth,
           disabilityType: event.disabilityType,
         ));
       }
-
     } catch (e) {
-      // If updating fails, emit an error state.
-      emit(MyAccountError('Failed to update user info.'));
+      emit(MyAccountError('Failed to update user info: $e'));
     }
   }
 }
