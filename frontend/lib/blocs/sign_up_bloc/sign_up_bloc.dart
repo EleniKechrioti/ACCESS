@@ -1,8 +1,10 @@
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:email_validator/email_validator.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../main_mobile.dart';
 
 part 'sign_up_event.dart';
 part 'sign_up_state.dart';
@@ -40,20 +42,33 @@ class SignUpBloc extends Bloc<SignUpEvent, SignUpState> {
       emit(state.copyWith(status: SignUpStatus.submitting));
 
       try {
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        final response = await supabase.auth.signUp(
           email: state.email.trim(),
           password: state.password.trim(),
         );
+
+        if (response.user == null) {
+          emit(state.copyWith(
+            status: SignUpStatus.failure,
+            errorMessage: 'Sign up failed. No user returned.',
+          ));
+          return;
+        }
+
+        // If no error, proceed with success
+        final user = response.user;
+        await Supabase.instance.client.from('users').insert({
+          'id': user!.id,
+          'email': state.email.trim(),
+          'avatar_url': '', // or some default URL
+          'date_of_birth': null,
+          'disability_type': null,
+        });
         emit(state.copyWith(status: SignUpStatus.success));
-      } on FirebaseAuthException catch (e) {
+      } catch (e) {
         emit(state.copyWith(
           status: SignUpStatus.failure,
-          errorMessage: _mapFirebaseSignUpErrorToMessage(e.code),
-        ));
-      } catch (_) {
-        emit(state.copyWith(
-          status: SignUpStatus.failure,
-          errorMessage: 'An unexpected error occurred',
+          errorMessage: mapSupabaseSignUpError(e.toString()),
         ));
       }
     }
@@ -68,24 +83,44 @@ class SignUpBloc extends Bloc<SignUpEvent, SignUpState> {
 
     try {
       final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+
       if (googleUser == null) {
-        emit(state.copyWith(status: SignUpStatus.initial)); // canceled
+        emit(state.copyWith(status: SignUpStatus.initial)); // cancelled
         return;
       }
 
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
 
-      final credential = GoogleAuthProvider.credential(
+      final supabase = Supabase.instance.client;
+
+      final response = await supabase.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: googleAuth.idToken!,
         accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
       );
 
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      if (response.user == null) {
+        emit(state.copyWith(
+          status: SignUpStatus.failure,
+          errorMessage: 'Google sign-in failed.',
+        ));
+        return;
+      }
+
+      // Insert user into "users" table if needed
+      await Supabase.instance.client.from('users').upsert({
+        'id': response.user!.id,
+        'email': response.user!.email,
+        'avatar_url': response.user!.userMetadata?['avatar_url'] ?? '',
+        'date_of_birth': null,
+        'disability_type': null,
+      });
+
       emit(state.copyWith(status: SignUpStatus.success));
     } catch (e) {
       emit(state.copyWith(
         status: SignUpStatus.failure,
-        errorMessage: 'Google sign-in failed',
+        errorMessage: mapSupabaseSignUpError(e.toString()),
       ));
     }
   }
@@ -95,17 +130,18 @@ class SignUpBloc extends Bloc<SignUpEvent, SignUpState> {
     emit(state.copyWith(status: SignUpStatus.initial));
   }
 
-  /// Maps FirebaseAuthException error codes to user-friendly messages
-  String _mapFirebaseSignUpErrorToMessage(String errorCode) {
-    switch (errorCode) {
-      case 'weak-password':
-        return 'The password provided is too weak.';
-      case 'email-already-in-use':
-        return 'The account already exists for that email.';
-      case 'invalid-email':
-        return 'The email provided is not valid.';
-      default:
-        return 'An error occurred during sign up.';
+  /// Maps Supabase error messages to user-friendly messages
+  String mapSupabaseSignUpError(String errorMessage) {
+    print(errorMessage);
+    if (errorMessage.contains('password')) {
+      return 'The password provided is too weak.';
+    } else if (errorMessage.contains('already registered') ||
+        errorMessage.contains('User already registered')) {
+      return 'The account already exists for that email.';
+    } else if (errorMessage.contains('email')) {
+      return 'The email provided is not valid.';
+    } else {
+      return 'An error occurred during sign up.';
     }
   }
 }

@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 part 'login_event.dart';
 part 'login_state.dart';
@@ -28,11 +29,19 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     // Set the state to loading while login is in progress
     emit(state.copyWith(status: LoginStatus.loading));
     try {
+      final supabase = Supabase.instance.client;
       // Attempt to sign in using email and password
-      await _firebaseAuth.signInWithEmailAndPassword(
+      final response = await supabase.auth.signInWithPassword(
         email: event.email,
         password: event.password,
       );
+      if (response.user == null || response.session == null) {
+        emit(state.copyWith(
+          status: LoginStatus.failure,
+          error: 'Login failed. No user or session returned.',
+        ));
+        return;
+      }
       // If successful, update the state to success
       emit(state.copyWith(status: LoginStatus.success));
     } catch (e) {
