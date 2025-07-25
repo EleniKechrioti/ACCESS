@@ -10,12 +10,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart'; // For Location
 import 'package:geocoding/geocoding.dart'; // For address from coordinates
 
-// --- Firebase Imports ---
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-// --- /Firebase Imports ---
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 part 'report_obstacle_event.dart';
 part 'report_obstacle_state.dart';
@@ -24,17 +19,13 @@ part 'report_obstacle_state.dart';
 ///
 /// Handles user input (description, type, rating, image, location),
 /// interacts with device services (location, permissions, image picker),
-/// and communicates with Firebase services (Auth, Firestore, Storage)
+/// and communicates with Firebase services (Auth, Supabase, Storage)
 /// to submit the final report.
 class ReportObstacleBloc extends Bloc<ReportObstacleEvent, ReportObstacleState> {
   /// Service for picking images from the device's gallery or camera.
   final ImagePicker _imagePicker = ImagePicker();
-  /// Firebase Authentication service instance. Used to get the current user.
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  /// Firestore database service instance. Used to save the report data.
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  /// Firebase Cloud Storage service instance. Used to upload the report image.
-  final FirebaseStorage _storage = FirebaseStorage.instance;
+  /// Supabase database service instance. Used to save the report data.
+  final supabase = Supabase.instance.client;
 
   /// Initializes the BLoC with the initial state and registers event handlers.
   ReportObstacleBloc() : super(ReportObstacleState.initial()) {
@@ -278,9 +269,10 @@ class ReportObstacleBloc extends Bloc<ReportObstacleEvent, ReportObstacleState> 
   Future<void> _onSubmitReportRequested( SubmitReportRequested event, Emitter<ReportObstacleState> emit) async {
 
     // --- Step 1: Validate mandatory fields ---
-    final currentUser = _auth.currentUser;
+    final user = supabase.auth.currentUser;
+
     // Check if user is logged in
-    if (currentUser == null) {
+    if (user == null) {
       // Greek message: 'You must be logged in to submit a report.'
       emit(state.copyWith(submissionStatus: SubmissionStatus.failure, errorMessageGetter: () => 'Πρέπει να είστε συνδεδεμένος για να υποβάλετε αναφορά.'));
       return;
@@ -319,48 +311,53 @@ class ReportObstacleBloc extends Bloc<ReportObstacleEvent, ReportObstacleState> 
     String? imageUrl; // Variable to store the uploaded image URL
 
     try {
-      // --- Step 2: Upload image to Firebase Storage ---
+      // --- Step 2: Upload image to Supabase Storage ---
       final imageFile = state.pickedImage;
       // Check if an image file exists and the file path is valid
       if (imageFile != null && imageFile.existsSync()) {
-        print("Uploading image to Firebase Storage..."); // Debug log
         // Create a unique file name using timestamp
         final String imageId = DateTime.now().millisecondsSinceEpoch.toString();
         // Define the storage path (using user ID for organization)
-        final String storagePath = 'report_images/${currentUser.uid}/$imageId.jpg';
+        final String storagePath = '${user.id}/$imageId.jpg';
         // Get a reference to the storage location
-        final Reference storageRef = _storage.ref().child(storagePath);
+        final storageResponse = await supabase.storage
+            .from('report-images')
+            .upload(storagePath, imageFile);
+        if (storageResponse.isEmpty) {
+          throw Exception("Αποτυχία αποθήκευσης εικόνας.");
+        }
         // Start the upload task
-        final UploadTask uploadTask = storageRef.putFile(imageFile);
-        // Await completion of the upload task with a timeout
-        final TaskSnapshot snapshot = await uploadTask.timeout(const Duration(seconds: 60));
-        // Get the download URL of the uploaded image
-        imageUrl = await snapshot.ref.getDownloadURL();
+        ///signed url for the image, with duration of 1 hour
+        final signedUrlResponse = await supabase.storage
+            .from('report-images')
+            .createSignedUrl(storagePath, 3600);
+        imageUrl = signedUrlResponse ;
         print("Image uploaded successfully: $imageUrl"); // Debug log
       } else {
         // This case should theoretically not be reached due to validation, but good to handle.
         print("Image file is null or does not exist, skipping upload.");
       }
 
-      // --- Step 3: Prepare data entry for Firestore ---
+      // --- Step 3: Prepare data entry for Supabase ---
       // Create a map containing all the report data
       final Map<String, dynamic> reportData = {
-        'userId': currentUser.uid, // ID of the user submitting the report
-        'userEmail': currentUser.email, // Email of the user
-        'locationDescription': state.userLocation ?? "Δεν δόθηκε περιγραφή", // Location string or default Greek message: 'No description provided'
-        'coordinates': GeoPoint(state.latitude!, state.longitude!), // Location coordinates
-        'obstacleType': state.selectedObstacleType!, // Selected obstacle type
+        'userid': user.id, // ID of the user submitting the report
+        'useremail': user.email, // Email of the user
+        'locationdescription': state.userLocation ?? "Δεν δόθηκε περιγραφή", // Location string or default Greek message: 'No description provided'
+        'latitude': state.latitude,
+        'longitude': state.longitude, // Location coordinates
+        'obstacletype': state.selectedObstacleType!, // Selected obstacle type
         'accessibility': state.accessibilityRating!, // Selected accessibility rating
         'description': state.description.isNotEmpty ? state.description : null, // User's description (null if empty)
-        'imageUrl': imageUrl, // URL of the uploaded image (null if upload failed or no image)
-        'timestamp': FieldValue.serverTimestamp(), // Server-side timestamp for creation time
-        'needsUpdate': true, // Backend checks if update is needed
+        'imageurl': imageUrl, // URL of the uploaded image (null if upload failed or no image)
+        'timestamp': DateTime.now().toIso8601String(), // Server-side timestamp for creation time
+        'needsupdate': true, // Backend checks if update is needed
       };
 
-      // --- Step 4: Store data in Firestore ---
-      print("Saving report data to Firestore..."); // Debug log
+      // --- Step 4: Store data in Supabase ---
+      print("Saving report data to Supabase..."); // Debug log
       // Add the report data as a new document in the 'reports' collection
-      await _firestore.collection('reports').add(reportData).timeout(const Duration(seconds: 30));
+      await supabase.from('reports').insert(reportData);
 
       print("Report saved successfully!"); // Debug log
       // Set state to success
@@ -377,15 +374,8 @@ class ReportObstacleBloc extends Bloc<ReportObstacleEvent, ReportObstacleState> 
       emit(state.copyWith(submissionStatus: SubmissionStatus.initial));
 
 
-    } on FirebaseException catch (e) {
-      // Handle errors specific to Firebase operations (Storage, Firestore)
-      print("Firebase error during submission: ${e.code} - ${e.message}"); // Debug log
-      emit(state.copyWith(
-          submissionStatus: SubmissionStatus.failure,
-          // Greek message: 'Firebase error: '
-          errorMessageGetter: () => 'Σφάλμα Firebase: ${e.message ?? e.code}'));
     } on TimeoutException catch (_) {
-      // Handle timeout errors during image upload or Firestore save
+      // Handle timeout errors during image upload or Supabase save
       // Greek message: 'The action took too long to complete (timeout).'
       emit(state.copyWith(submissionStatus: SubmissionStatus.failure, errorMessageGetter: () => 'Η ενέργεια άργησε να ολοκληρωθεί (timeout).'));
     } catch (e) {
